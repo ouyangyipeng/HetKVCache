@@ -1,0 +1,53 @@
+# 编译输出
+build/
+*.o
+*.obj
+*.exe
+*.out
+*.app
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# IDE配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake缓存
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# 日志和临时文件
+*.log
+*.tmp
+*.temp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.Python
+venv/
+env/
+
+# SSD交换文件
+*.swap
+*.bin
+
+# 测试输出
+test_output/
+benchmark_results/
+
+# 打包文件
+*.tar.gz
+*.zip
