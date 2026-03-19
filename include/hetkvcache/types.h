@@ -497,6 +497,12 @@ struct Statistics {
         , vram_used_bytes(0)
     {}
     
+    // 拷贝构造函数
+    Statistics(const Statistics& other) = default;
+    
+    // 拷贝赋值运算符
+    Statistics& operator=(const Statistics& other) = default;
+    
     double cacheHitRate() const {
         uint64_t total = vram_hits + ram_hits + ssd_hits + misses;
         return total > 0 ? static_cast<double>(vram_hits + ram_hits + ssd_hits) / total : 0.0;
