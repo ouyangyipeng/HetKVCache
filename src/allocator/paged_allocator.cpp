@@ -4,7 +4,8 @@
  */
 
 #include "hetkvcache/allocator/paged_allocator.h"
-#include <cuda_runtime.h>
+#include "hetkvcache/device/device_interface.h"
+#include "hetkvcache/device/cuda_compat.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>

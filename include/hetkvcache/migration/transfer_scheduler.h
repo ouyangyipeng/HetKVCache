@@ -21,9 +21,14 @@
 #include <algorithm>
 #include <map>
 
+// 根据编译后端选择适当的头文件和类型定义
+#ifdef USE_ASCEND
+#include "hetkvcache/device/cuda_compat.h"
+#else
 // CUDA 前向声明
 struct CUstream_st;
 typedef struct CUstream_st* cudaStream_t;
+#endif
 
 namespace hetkvcache {
 

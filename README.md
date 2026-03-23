@@ -7,6 +7,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-green.svg)](https://isocpp.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-11.0+-green.svg)](https://developer.nvidia.com/cuda-toolkit)
+[![Ascend](https://img.shields.io/badge/Ascend-910-orange.svg)](https://www.hiascend.com/)
 
 </div>
 
@@ -70,11 +71,21 @@ HetKVCache（Heterogeneous KV Cache）是专为大规模语言模型（LLM）推
 
 - **操作系统**：Linux (Ubuntu 20.04+ 推荐)
 - **编译器**：GCC 9+ 或 Clang 10+
-- **CUDA**：11.0 或更高版本
 - **CMake**：3.18+
+
+#### 后端支持（选择其一）
+
+**NVIDIA CUDA 模式：**
+- **CUDA**：11.0 或更高版本
 - **GPU**：NVIDIA GPU (计算能力 7.0+)
 
+**华为昇腾 NPU 模式：**
+- **CANN**：8.0 或更高版本
+- **NPU**：华为昇腾 910 系列NPU
+
 ### 安装步骤
+
+#### CUDA 模式
 
 ```bash
 # 1. 克隆仓库
@@ -84,11 +95,32 @@ cd HetKVCache
 # 2. 创建构建目录
 mkdir build && cd build
 
-# 3. 配置和编译
+# 3. 配置和编译 (CUDA模式，默认)
 cmake ..
 make -j$(nproc)
 
 # 4. 安装 (可选)
+sudo make install
+```
+
+#### 昇腾 NPU 模式
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/your-repo/HetKVCache.git
+cd HetKVCache
+
+# 2. 确保CANN环境已配置
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+
+# 3. 创建构建目录
+mkdir build && cd build
+
+# 4. 配置和编译 (昇腾NPU模式)
+cmake -DUSE_ASCEND=ON ..
+make -j$(nproc)
+
+# 5. 安装 (可选)
 sudo make install
 ```
 

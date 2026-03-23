@@ -4,7 +4,8 @@
  */
 
 #include "hetkvcache/migration/migration_engine.h"
-#include <cuda_runtime.h>
+#include "hetkvcache/device/device_interface.h"
+#include "hetkvcache/device/cuda_compat.h"
 #include <algorithm>
 #include <fstream>
 #include <cstring>
