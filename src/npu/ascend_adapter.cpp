@@ -420,4 +420,70 @@ void AscendAdapter::setLastError(const std::string& error) {
     last_error_ = error;
 }
 
+// ============================================================================
+// 多卡负载均衡实现
+// ============================================================================
+
+int AscendAdapter::getOptimalDevice() {
+    if (device_count_ <= 1) {
+        return 0;
+    }
+    
+    // 轮询调度策略 - 简单高效
+    int optimal = next_device_.fetch_add(1) % device_count_;
+    
+    // 更新负载统计
+    updateDeviceLoad(optimal);
+    
+    return optimal;
+}
+
+float AscendAdapter::getDeviceLoad(int device_id) {
+    if (device_id < 0 || device_id >= device_count_) {
+        return 1.0f;  // 返回最大负载表示无效设备
+    }
+    
+    // 基于内存使用率计算负载
+    if (device_id < static_cast<int>(device_memory_usage_.size())) {
+        constexpr size_t TOTAL_MEMORY = 32ULL * 1024 * 1024 * 1024;  // 32GB
+        return static_cast<float>(device_memory_usage_[device_id]) / TOTAL_MEMORY;
+    }
+    
+    return 0.0f;
+}
+
+bool AscendAdapter::setDeviceAffinity(const std::vector<int>& device_ids) {
+    if (device_ids.empty()) {
+        return false;
+    }
+    
+    // 验证所有设备ID有效
+    for (int id : device_ids) {
+        if (id < 0 || id >= device_count_) {
+            setLastError("Invalid device ID in affinity list: " + std::to_string(id));
+            return false;
+        }
+    }
+    
+    // 设置第一个设备为当前设备
+    return setDevice(device_ids[0]);
+}
+
+void AscendAdapter::updateDeviceLoad(int device_id) {
+    if (device_id < 0 || device_id >= device_count_) {
+        return;
+    }
+    
+    // 确保向量大小正确
+    if (device_memory_usage_.size() < static_cast<size_t>(device_count_)) {
+        device_memory_usage_.resize(device_count_, 0);
+    }
+    if (device_active_streams_.size() < static_cast<size_t>(device_count_)) {
+        device_active_streams_.resize(device_count_, 0);
+    }
+    
+    // 增加活跃流计数（简化实现）
+    device_active_streams_[device_id]++;
+}
+
 } // namespace hetkvcache

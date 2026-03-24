@@ -143,6 +143,7 @@ set(CORE_SOURCES
     src/core/memory_pool.cpp
     src/core/block_allocator.cpp
     src/monitor/access_monitor.cpp
+    src/monitor/lockfree_monitor.cpp
     src/monitor/heat_evaluator.cpp
     src/monitor/access_pattern_analyzer.cpp
     src/migration/migration_engine.cpp

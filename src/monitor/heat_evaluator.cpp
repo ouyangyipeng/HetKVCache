@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <omp.h>  // OpenMP并行化
 
 namespace hetkvcache {
 
@@ -38,13 +39,19 @@ void HeatEvaluator::processAccess(const AccessRecord& record) {
     info.last_access_time = record.timestamp;
     info.access_count++;
     
-    // 记录层ID用于层重要性计算
-    layer_blocks_[record.layer_id].push_back(record.block_id);
+    // 记录层ID用于层重要性计算 - 使用哈希表快速查找
+    block_to_layer_[record.block_id] = record.layer_id;
 }
 
 void HeatEvaluator::processAccessBatch(const std::vector<AccessRecord>& records) {
+    std::unique_lock<std::shared_mutex> lock(heat_mutex_);
+    
     for (const auto& record : records) {
-        processAccess(record);
+        auto& info = block_heat_info_[record.block_id];
+        info.block_id = record.block_id;
+        info.last_access_time = record.timestamp;
+        info.access_count++;
+        block_to_layer_[record.block_id] = record.layer_id;
     }
 }
 
@@ -62,13 +69,11 @@ void HeatEvaluator::updateBlockHeat(BlockId block_id, Timestamp current_time) {
     info.frequency_score = computeFrequencyScore(info.access_count, current_time);
     info.recency_score = computeRecencyScore(info.last_access_time, current_time);
     
-    // 查找层ID
+    // 使用哈希表快速查找层ID - O(1) 而非 O(n)
     LayerId layer_id = 0;
-    for (const auto& [lid, blocks] : layer_blocks_) {
-        if (std::find(blocks.begin(), blocks.end(), block_id) != blocks.end()) {
-            layer_id = lid;
-            break;
-        }
+    auto layer_it = block_to_layer_.find(block_id);
+    if (layer_it != block_to_layer_.end()) {
+        layer_id = layer_it->second;
     }
     info.layer_importance = computeLayerImportance(layer_id);
     
@@ -88,17 +93,66 @@ void HeatEvaluator::updateBlockHeat(BlockId block_id, Timestamp current_time) {
 }
 
 void HeatEvaluator::updateAllHeatScores(Timestamp current_time) {
+    // 第一阶段：收集需要更新的块ID（读锁）
     std::vector<BlockId> blocks_to_update;
+    std::vector<std::pair<BlockId, BlockHeatInfo*>> block_info_ptrs;
+    
     {
         std::shared_lock<std::shared_mutex> lock(heat_mutex_);
-        for (const auto& [block_id, _] : block_heat_info_) {
+        blocks_to_update.reserve(block_heat_info_.size());
+        for (auto& [block_id, info] : block_heat_info_) {
             blocks_to_update.push_back(block_id);
         }
     }
     
-    for (BlockId block_id : blocks_to_update) {
-        updateBlockHeat(block_id, current_time);
+    // 第二阶段：并行计算热度分数（无锁）
+    // 使用OpenMP并行处理
+    #pragma omp parallel for schedule(dynamic, 64)
+    for (size_t i = 0; i < blocks_to_update.size(); i++) {
+        BlockId block_id = blocks_to_update[i];
+        
+        // 获取块信息（需要锁）
+        BlockHeatInfo local_info;
+        LayerId layer_id = 0;
+        {
+            std::shared_lock<std::shared_mutex> lock(heat_mutex_);
+            auto it = block_heat_info_.find(block_id);
+            if (it == block_heat_info_.end()) continue;
+            local_info = it->second;
+            
+            auto layer_it = block_to_layer_.find(block_id);
+            if (layer_it != block_to_layer_.end()) {
+                layer_id = layer_it->second;
+            }
+        }
+        
+        // 计算热度分数（无锁，纯计算）
+        float frequency_score = computeFrequencyScore(local_info.access_count, current_time);
+        float recency_score = computeRecencyScore(local_info.last_access_time, current_time);
+        float layer_importance = computeLayerImportance(layer_id);
+        
+        float heat_score = params_.alpha * frequency_score +
+                          params_.beta * recency_score +
+                          params_.gamma * layer_importance;
+        heat_score = std::max(0.0f, std::min(1.0f, heat_score));
+        TierType recommended_tier = classifyTier(heat_score);
+        
+        // 写回结果（需要锁）
+        {
+            std::unique_lock<std::shared_mutex> lock(heat_mutex_);
+            auto it = block_heat_info_.find(block_id);
+            if (it != block_heat_info_.end()) {
+                it->second.frequency_score = frequency_score;
+                it->second.recency_score = recency_score;
+                it->second.layer_importance = layer_importance;
+                it->second.heat_score = heat_score;
+                it->second.recommended_tier = recommended_tier;
+                it->second.last_eval_time = current_time;
+            }
+        }
     }
+    
+    total_evaluations_ += blocks_to_update.size();
 }
 
 float HeatEvaluator::getHeatScore(BlockId block_id) const {

@@ -411,6 +411,9 @@ struct HetKVCacheConfig {
     size_t block_size;               ///< 块大小 (字节)
     bool use_pinned_memory;          ///< 是否使用锁页内存
     
+    // 监控器配置
+    bool use_lockfree_monitor;       ///< 是否使用无锁监控器（高性能，默认开启）
+    
     // 日志配置
     int log_level;                   ///< 日志级别 (0=off, 1=error, 2=warn, 3=info, 4=debug)
     std::string log_file;            ///< 日志文件路径
@@ -432,6 +435,7 @@ struct HetKVCacheConfig {
         , migration_batch_size(16)
         , block_size(16 * 1024)      // 16KB
         , use_pinned_memory(true)
+        , use_lockfree_monitor(true) // 默认使用高性能无锁监控器
         , log_level(2)
         , log_file("")
     {}

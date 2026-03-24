@@ -339,19 +339,46 @@ private:
     double computeFragmentation() const;
 
 private:
+    // 分片锁常量
+    static constexpr size_t NUM_SHARDS = 16;  // 分片数量，2的幂次方
+    
+    // 分片锁结构
+    struct alignas(64) Shard {
+        mutable std::shared_mutex mutex;
+        std::unordered_map<BlockId, BlockMetadata> block_metadata;
+        std::queue<BlockId> free_list;  // 每个分片有自己的空闲链表
+        size_t usage = 0;
+    };
+    
+    // 获取块所属的分片
+    size_t getShard(BlockId block_id) const {
+        return block_id & (NUM_SHARDS - 1);  // 位运算取模
+    }
+    
+    // 获取层级对应的分片
+    size_t getTierShard(TierType tier) const {
+        return static_cast<size_t>(tier) % NUM_SHARDS;
+    }
+
+private:
     PagedAllocatorConfig config_;
-    mutable std::shared_mutex mutex_;
+    mutable std::shared_mutex global_mutex_;  // 全局锁，用于初始化等操作
+    mutable std::shared_mutex mutex_;         // 主锁（兼容旧代码）
+    
+    // 分片锁数组
+    std::array<Shard, NUM_SHARDS> shards_;
+    
+    // 块元数据（兼容旧代码）
+    std::unordered_map<BlockId, BlockMetadata> block_metadata_;
     
     // 内存池
     void* vram_pool_;
     void* ram_pool_;
     int ssd_fd_;
     
-    // 块元数据
-    std::unordered_map<BlockId, BlockMetadata> block_metadata_;
-    
-    // 空闲链表
+    // 全局空闲链表（按层级）
     std::array<std::queue<BlockId>, NUM_TIERS> free_lists_;
+    mutable std::array<std::mutex, NUM_TIERS> free_list_mutexes_;  // 每个层级一个锁
     
     // 层级块映射
     std::unordered_map<TierType, std::vector<BlockId>> tier_blocks_;
@@ -373,7 +400,7 @@ private:
     
     // 层级容量
     std::array<size_t, NUM_TIERS> tier_capacities_;
-    size_t tier_usages_[NUM_TIERS];  // 使用普通数组避免atomic的fill问题
+    std::atomic<size_t> tier_usages_[NUM_TIERS];  // 使用原子数组
     
     // 初始化状态
     std::atomic<bool> initialized_;

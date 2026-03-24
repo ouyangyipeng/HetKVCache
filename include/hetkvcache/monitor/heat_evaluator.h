@@ -277,6 +277,9 @@ private:
     // 块热度信息
     std::unordered_map<BlockId, BlockHeatInfo> block_heat_info_;
     
+    // 块到层的映射 - O(1)快速查找
+    std::unordered_map<BlockId, LayerId> block_to_layer_;
+    
     // 层到块的映射
     std::unordered_map<LayerId, std::vector<BlockId>> layer_blocks_;
     

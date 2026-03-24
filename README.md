@@ -340,6 +340,20 @@ cd build
 | 迁移开销 | < 5% | 迁移时间占总时间比 |
 | 内存碎片 | 0% | 完全无碎片 |
 
+### 昇腾NPU平台性能 (鲲鹏920 + 8x昇腾910B4)
+
+| 组件 | 吞吐量 | 说明 |
+|------|--------|------|
+| Allocator | 582K ops/sec | 分页分配器 |
+| HeatEvaluator | 490K ops/sec | 热度评估（OpenMP并行化） |
+| **LockFree Monitor** | **1.83M ops/sec** | 无锁监控器（**1830x提升**） |
+| Concurrent Monitor | 1.36M ops/sec | 并发访问监控 |
+
+**关键优化成果**:
+- LockFree Monitor替代传统锁实现，吞吐量从998 ops/sec提升至1.83M ops/sec
+- HeatEvaluator使用OpenMP并行化，性能提升59%
+- 多NPU负载均衡支持8卡昇腾910B4
+
 ### 性能调优建议
 
 1. **调整块大小**：根据模型hidden_size调整，推荐设置为`hidden_size * num_heads * sizeof(float16)`

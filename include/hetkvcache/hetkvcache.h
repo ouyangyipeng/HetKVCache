@@ -11,6 +11,7 @@
 #include "hetkvcache/types.h"
 #include "hetkvcache/config.h"
 #include "hetkvcache/monitor/access_monitor.h"
+#include "hetkvcache/monitor/lockfree_monitor.h"
 #include "hetkvcache/monitor/heat_evaluator.h"
 #include "hetkvcache/monitor/access_pattern_analyzer.h"
 #include "hetkvcache/migration/migration_engine.h"
@@ -270,6 +271,7 @@ private:
     
     // 模块实例
     std::unique_ptr<AccessMonitor> monitor_;
+    std::unique_ptr<LockFreeAccessMonitor> lockfree_monitor_;  // 高性能无锁监控器
     std::unique_ptr<HeatEvaluator> evaluator_;
     std::unique_ptr<AccessPatternAnalyzer> analyzer_;
     std::unique_ptr<MigrationEngine> migrator_;
@@ -277,6 +279,9 @@ private:
     std::unique_ptr<Prefetcher> prefetcher_;
     std::unique_ptr<PagedAllocator> allocator_;
     std::unique_ptr<MemoryMapper> mapper_;
+    
+    // 使用无锁监控器标志
+    bool use_lockfree_monitor_ = true;
     
     // 句柄管理
     mutable std::mutex handle_mutex_;

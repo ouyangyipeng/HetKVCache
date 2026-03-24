@@ -6,6 +6,7 @@
 #include "hetkvcache/hetkvcache.h"
 #include "hetkvcache/device/device_interface.h"
 #include "hetkvcache/device/cuda_compat.h"
+#include "hetkvcache/monitor/lockfree_monitor.h"
 
 namespace hetkvcache {
 
@@ -51,7 +52,23 @@ bool HetKVCache::initialize(const HetKVCacheConfig& config) {
     config_ = config;
     
     // 初始化各模块
-    monitor_ = std::make_unique<AccessMonitor>();
+    // 根据配置决定使用哪个监控器：默认使用高性能无锁监控器
+    if (config.use_lockfree_monitor || use_lockfree_monitor_) {
+        lockfree_monitor_ = std::make_unique<LockFreeAccessMonitor>();
+        if (!lockfree_monitor_->initialize(LockFreeAccessMonitor::MonitorMode::FULL,
+                                          1.0f, 1000000,
+                                          100000)) {  // 默认100K块
+            return false;
+        }
+        use_lockfree_monitor_ = true;
+    } else {
+        monitor_ = std::make_unique<AccessMonitor>();
+        if (!monitor_->initialize(AccessMonitor::MonitorMode::FULL, 1.0f, 1000000)) {
+            return false;
+        }
+        use_lockfree_monitor_ = false;
+    }
+    
     evaluator_ = std::make_unique<HeatEvaluator>();
     analyzer_ = std::make_unique<AccessPatternAnalyzer>();
     migrator_ = std::make_unique<MigrationEngine>();
@@ -59,11 +76,6 @@ bool HetKVCache::initialize(const HetKVCacheConfig& config) {
     prefetcher_ = std::make_unique<Prefetcher>();
     allocator_ = std::make_unique<PagedAllocator>();
     mapper_ = std::make_unique<MemoryMapper>();
-    
-    // 初始化监控器
-    if (!monitor_->initialize(AccessMonitor::MonitorMode::FULL, 1.0f, 1000000)) {
-        return false;
-    }
     
     // 初始化分配器
     PagedAllocatorConfig allocator_config;
@@ -88,8 +100,12 @@ bool HetKVCache::initialize(const HetKVCacheConfig& config) {
     running_ = true;
     background_thread_ = std::thread(&HetKVCache::backgroundWorker, this);
     
-    // 启动监控
-    monitor_->startMonitoring();
+    // 启动监控（根据选择的监控器）
+    if (use_lockfree_monitor_) {
+        lockfree_monitor_->startMonitoring();
+    } else {
+        monitor_->startMonitoring();
+    }
     
     initialized_ = true;
     return true;
@@ -105,8 +121,14 @@ void HetKVCache::shutdown() {
         background_thread_.join();
     }
     
-    monitor_->stopMonitoring();
-    monitor_->shutdown();
+    // 关闭监控器（根据选择的监控器）
+    if (use_lockfree_monitor_ && lockfree_monitor_) {
+        lockfree_monitor_->stopMonitoring();
+        lockfree_monitor_->shutdown();
+    } else if (monitor_) {
+        monitor_->stopMonitoring();
+        monitor_->shutdown();
+    }
     allocator_->shutdown();
     
     initialized_ = false;

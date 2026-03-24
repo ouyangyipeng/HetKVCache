@@ -4,12 +4,15 @@
  */
 
 #include "hetkvcache/hetkvcache.h"
+#include "hetkvcache/monitor/access_monitor.h"
+#include "hetkvcache/monitor/lockfree_monitor.h"
 #include <iostream>
 #include <chrono>
 #include <vector>
 #include <random>
 #include <algorithm>
 #include <iomanip>
+#include <thread>
 
 using namespace hetkvcache;
 
@@ -188,6 +191,91 @@ BenchmarkResult benchmark_access_monitor(AccessMonitor& monitor,
     return result;
 }
 
+// 无锁监控器基准测试
+BenchmarkResult benchmark_lockfree_monitor(const BenchmarkConfig& config) {
+    BenchmarkResult result;
+    result.name = "LockFree Access Monitor Benchmark";
+    
+    LockFreeAccessMonitor monitor;
+    monitor.initialize(LockFreeAccessMonitor::MonitorMode::FULL, 1.0f, 100000);
+    monitor.startMonitoring();
+    
+    Timer timer;
+    timer.start();
+    
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> block_dist(0, config.num_blocks - 1);
+    std::uniform_int_distribution<> layer_dist(0, config.num_layers - 1);
+    std::uniform_int_distribution<> head_dist(0, config.num_heads - 1);
+    
+    // 单线程测试
+    for (int i = 0; i < config.num_iterations * 10; i++) {
+        monitor.recordAccess(block_dist(gen), AccessType::READ,
+                            layer_dist(gen), head_dist(gen), i);
+    }
+    
+    result.total_time_ms = timer.elapsed_ms();
+    result.operations = config.num_iterations * 10;
+    result.avg_time_us = (result.total_time_ms * 1000) / result.operations;
+    result.throughput_ops_per_sec = (result.operations * 1000) / result.total_time_ms;
+    result.cache_hit_rate = 1.0;
+    
+    monitor.stopMonitoring();
+    monitor.shutdown();
+    
+    return result;
+}
+
+// 并发监控器基准测试
+BenchmarkResult benchmark_concurrent_monitor(const BenchmarkConfig& config) {
+    BenchmarkResult result;
+    result.name = "Concurrent LockFree Monitor Benchmark";
+    
+    LockFreeAccessMonitor monitor;
+    monitor.initialize(LockFreeAccessMonitor::MonitorMode::FULL, 1.0f, 100000);
+    monitor.startMonitoring();
+    
+    Timer timer;
+    timer.start();
+    
+    // 多线程并发测试
+    const int num_threads = std::thread::hardware_concurrency();
+    std::vector<std::thread> threads;
+    std::atomic<int> total_ops{0};
+    
+    for (int t = 0; t < num_threads; t++) {
+        threads.emplace_back([&monitor, &config, &total_ops, t]() {
+            std::random_device rd;
+            std::mt19937 gen(rd() + t);
+            std::uniform_int_distribution<> block_dist(0, config.num_blocks - 1);
+            std::uniform_int_distribution<> layer_dist(0, config.num_layers - 1);
+            std::uniform_int_distribution<> head_dist(0, config.num_heads - 1);
+            
+            for (int i = 0; i < config.num_iterations; i++) {
+                monitor.recordAccess(block_dist(gen), AccessType::READ,
+                                    layer_dist(gen), head_dist(gen), i);
+                total_ops.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+    
+    for (auto& t : threads) {
+        t.join();
+    }
+    
+    result.total_time_ms = timer.elapsed_ms();
+    result.operations = total_ops.load();
+    result.avg_time_us = (result.total_time_ms * 1000) / result.operations;
+    result.throughput_ops_per_sec = (result.operations * 1000) / result.total_time_ms;
+    result.cache_hit_rate = 1.0;
+    
+    monitor.stopMonitoring();
+    monitor.shutdown();
+    
+    return result;
+}
+
 // 迁移引擎基准测试
 BenchmarkResult benchmark_migration(MigrationEngine& engine,
                                     const BenchmarkConfig& config) {
@@ -272,7 +360,7 @@ void run_benchmarks(const BenchmarkConfig& config) {
     
     std::vector<BenchmarkResult> results;
     
-    // 分配器基准测试
+    // 基础分配器基准测试
     {
         PagedAllocatorConfig alloc_config;
         alloc_config.block_size = 16 * 1024;
@@ -293,10 +381,20 @@ void run_benchmarks(const BenchmarkConfig& config) {
         results.push_back(benchmark_heat_evaluator(evaluator, config));
     }
     
-    // 访问监控基准测试
+    // 访问监控基准测试（原始版本）
     {
         AccessMonitor monitor;
         results.push_back(benchmark_access_monitor(monitor, config));
+    }
+    
+    // 无锁监控器基准测试
+    {
+        results.push_back(benchmark_lockfree_monitor(config));
+    }
+    
+    // 并发监控器基准测试
+    {
+        results.push_back(benchmark_concurrent_monitor(config));
     }
     
     // 打印结果

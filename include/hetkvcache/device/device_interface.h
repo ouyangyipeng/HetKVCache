@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string>
 #include <memory>
+#include <vector>
 
 namespace hetkvcache {
 
@@ -230,6 +231,36 @@ public:
      * @brief 清除错误状态
      */
     virtual void clearLastError() = 0;
+    
+    // ========================================================================
+    // 多卡负载均衡（可选实现）
+    // ========================================================================
+    
+    /**
+     * @brief 获取最优设备ID（负载均衡）
+     * @return 最优设备ID，失败返回0
+     */
+    virtual int getOptimalDevice() { return 0; }
+    
+    /**
+     * @brief 获取设备负载
+     * @param device_id 设备ID
+     * @return 设备负载（0.0-1.0），失败返回0.0
+     */
+    virtual float getDeviceLoad(int device_id) {
+        (void)device_id;
+        return 0.0f;
+    }
+    
+    /**
+     * @brief 设置设备亲和性
+     * @param device_ids 设备ID列表
+     * @return 成功返回true
+     */
+    virtual bool setDeviceAffinity(const std::vector<int>& device_ids) {
+        (void)device_ids;
+        return true;
+    }
 };
 
 /**

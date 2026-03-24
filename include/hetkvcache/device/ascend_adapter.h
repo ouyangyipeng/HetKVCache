@@ -98,12 +98,40 @@ public:
     std::string getLastError() override;
     void clearLastError() override;
     
+    // ========================================================================
+    // 多卡负载均衡
+    // ========================================================================
+    
+    /**
+     * @brief 获取最优设备（基于负载均衡）
+     * @return 最优设备ID
+     */
+    int getOptimalDevice() override;
+    
+    /**
+     * @brief 获取设备负载
+     * @param device_id 设备ID
+     * @return 负载值 (0.0-1.0)
+     */
+    float getDeviceLoad(int device_id) override;
+    
+    /**
+     * @brief 设置设备亲和性
+     * @param device_ids 设备ID列表
+     */
+    bool setDeviceAffinity(const std::vector<int>& device_ids) override;
+    
 private:
     std::atomic<bool> initialized_;
     std::atomic<int> current_device_;
     std::mutex device_mutex_;
     std::string last_error_;
     int device_count_;
+    
+    // 多卡负载均衡
+    std::vector<size_t> device_memory_usage_;  // 每个设备的内存使用量
+    std::vector<int> device_active_streams_;   // 每个设备的活跃流数量
+    std::atomic<int> next_device_{0};          // 轮询调度下一个设备
     
     // ACL运行时配置
     static std::mutex global_init_mutex_;
@@ -118,6 +146,11 @@ private:
      * @brief 设置错误信息
      */
     void setLastError(const std::string& error);
+    
+    /**
+     * @brief 更新设备负载统计
+     */
+    void updateDeviceLoad(int device_id);
 };
 
 } // namespace hetkvcache
