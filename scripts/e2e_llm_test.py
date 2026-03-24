@@ -6,6 +6,12 @@ HetKVCache 端到端LLM推理测试脚本
 
 import os
 import sys
+
+# 设置昇腾环境 - 必须在导入torch之前
+os.environ['ASCEND_DEVICE_ID'] = '0'
+
+# 首先导入torch和torch_npu
+import torch
 import time
 import json
 import argparse
@@ -13,19 +19,28 @@ import statistics
 from datetime import datetime
 from typing import List, Dict, Any
 
-# 设置昇腾环境
-os.environ['ASCEND_DEVICE_ID'] = '0'
-
+# 导入torch_npu并应用补丁
 try:
-    import torch
     import torch_npu  # 昇腾PyTorch扩展
-    from torch_npu.contrib import transfer_to_npu
     print(f"PyTorch version: {torch.__version__}")
     print(f"torch_npu available: True")
+    
+    # 在导入transfer_to_npu之前应用NPU兼容性补丁
+    # 这样补丁会覆盖transfer_to_npu的修改
+    from npu_compat import apply_all_npu_patches
+    apply_all_npu_patches()
+    
+    # 现在导入transfer_to_npu
+    from torch_npu.contrib import transfer_to_npu
+    
+    # 再次应用补丁以确保覆盖transfer_to_npu的修改
+    apply_all_npu_patches()
+    
 except ImportError as e:
     print(f"Warning: torch_npu not available: {e}")
     print("Falling back to CPU mode...")
 
+# 在补丁应用后再导入transformers
 try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     TRANSFORMERS_AVAILABLE = True
